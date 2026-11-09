@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { BoxState, CakeState, Postcard, Project, Screen } from './types';
 import Home from './screens/Home';
 import { ModeSelect, ChallengeSelect } from './screens/ModeSelect';
@@ -19,6 +19,7 @@ export default function App() {
   const [screen, setScreenState] = useState<Screen>('home');
   const [project, setProject] = useState<Project | null>(null);
   const [sound, setSoundState] = useState(soundEnabled());
+  const projectRef = useRef(project); projectRef.current = project;
   const challenge: Challenge | undefined = project?.challengeId ? CHALLENGES.find((c) => c.id === project.challengeId) : undefined;
 
   // lightweight hash routing so the browser back button works
@@ -45,6 +46,7 @@ export default function App() {
   const onPostcard = useCallback((postcard: Postcard) => setProject((p) => (p ? { ...p, postcard } : p)), []);
 
   const save = async (name: string, stars?: number) => {
+    const project = projectRef.current;
     if (!project) return;
     try {
       const saved = await saveProject({ ...project, name: name || 'My Sweet Cake', thumbnail: cakeThumb(project.cake, 420), stars: stars ?? project.stars });

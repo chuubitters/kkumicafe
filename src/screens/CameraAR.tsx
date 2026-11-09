@@ -23,6 +23,7 @@ export default function CameraAR({ project, onClose }: { project: Project; onClo
   const bgImg = useRef<HTMLImageElement | null>(null);
   const obj = useRef({ x: 0.5, y: 0.6, s: 1 });
   const popStart = useRef(performance.now());
+  const lastAnimT = useRef(0);
   const sprite = useRef<HTMLCanvasElement | null>(null);
   const anim = useRef<HTMLCanvasElement | null>(null);
   const modeRef = useRef(mode); modeRef.current = mode;
@@ -32,7 +33,9 @@ export default function CameraAR({ project, onClose }: { project: Project; onClo
   useEffect(() => {
     void ensureReady(project).then(() => {
       sprite.current = cakeImage(project.cake, 900, 0.5).canvas;
-      const a = document.createElement('canvas'); a.width = 720; a.height = 900; anim.current = a;
+      // smaller animation buffer on phones keeps the camera smooth
+      const small = Math.min(window.innerWidth, window.innerHeight) < 700;
+      const a = document.createElement('canvas'); a.width = small ? 480 : 720; a.height = small ? 600 : 900; anim.current = a;
     });
   }, [project]);
 
@@ -56,7 +59,7 @@ export default function CameraAR({ project, onClose }: { project: Project; onClo
     }
   };
 
-  const pop = () => { popStart.current = performance.now(); play('whoosh'); setTimeout(() => play('tada'), 1600); };
+  const pop = () => { popStart.current = performance.now(); lastAnimT.current = 0; play('whoosh'); setTimeout(() => play('tada'), 1600); };
 
   // render loop
   useEffect(() => {
@@ -87,18 +90,23 @@ export default function CameraAR({ project, onClose }: { project: Project; onClo
       const base = Math.min(W, H) * 0.9 * o.s;
       if (modeRef.current === 'box' && anim.current) {
         const a = anim.current, actx = a.getContext('2d')!;
-        actx.clearRect(0, 0, a.width, a.height);
-        animFrame(actx, a.width, a.height, project, Math.min(1, t * 1.05), { background: false });
+        const at = Math.min(1, t * 1.05);
+        // once the reveal finishes, keep the last frame instead of re-rendering it every frame
+        if (!(at >= 1 && lastAnimT.current >= 1)) {
+          actx.clearRect(0, 0, a.width, a.height);
+          animFrame(actx, a.width, a.height, project, at, { background: false });
+        }
+        lastAnimT.current = at;
         const w = base, h = base * (a.height / a.width);
         ctx.drawImage(a, o.x * W - w / 2, o.y * H - h * 0.62, w, h);
       } else if (sprite.current) {
         const u = Math.min(1, (performance.now() - popStart.current) / 900);
         const bounce = u < 1 ? 1 + Math.sin(u * Math.PI * 2.5) * (1 - u) * 0.35 - (1 - u) * (1 - u) * 0.9 : 1;
         const w = base * Math.max(0.05, bounce);
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 30 * dpr; ctx.shadowOffsetY = 20 * dpr;
+        // cheap contact shadow (shadowBlur is very slow on phones)
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath(); ctx.ellipse(o.x * W, o.y * H + w * 0.3, w * 0.4, w * 0.07, 0, 0, Math.PI * 2); ctx.fill();
         ctx.drawImage(sprite.current, o.x * W - w / 2, o.y * H - w * 0.6, w, w);
-        ctx.restore();
         if (u < 1 || (performance.now() - popStart.current) < 2500) {
           for (let i = 0; i < 12; i++) {
             const ang = (i / 12) * Math.PI * 2 + u, d = base * (0.25 + u * 0.4);

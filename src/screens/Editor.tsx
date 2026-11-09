@@ -90,7 +90,9 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
   const replaceRef = useRef<HTMLInputElement>(null);
   const sliceRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => { onChange(cake); }, [cake, onChange]);
+  // sync to the app lazily (cheap during rapid slider/drag edits); flushed on navigation & save
+  useEffect(() => { const t = setTimeout(() => onChange(cake), 250); return () => clearTimeout(t); }, [cake, onChange]);
+  const flush = () => onChange(cake);
 
   // keyboard shortcuts
   useEffect(() => {
@@ -172,10 +174,10 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
     };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const Asset = ({ kind, extra = {}, label }: { kind: ItemKind; extra?: Partial<Item>; label?: string }) => {
+  const asset = (kind: ItemKind, extra: Partial<Item> = {}, label?: string) => {
     const img = assetThumb(kind, extra);
     return (
-      <button className="thumb flex-col p-1" title={label || ASSETS[kind as Exclude<ItemKind, 'piping'>]?.label}
+      <button key={kind + (extra.variant || '')} className="thumb flex-col p-1" title={label || ASSETS[kind as Exclude<ItemKind, 'piping'>]?.label}
         onPointerDown={(e) => startPaletteDrag(e, kind, extra, img)}
         onClick={() => addItem(kind, extra)}>
         <img src={img} alt="" className="pointer-events-none h-[70%] w-[70%] object-contain" draggable={false} />
@@ -186,7 +188,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
 
   useEffect(() => { if (sliceRef.current) drawSlice(sliceRef.current.getContext('2d')!, cake, 260, 170); }, [cake, tab]);
 
-  const draw = (ctx: CanvasRenderingContext2D, W: number, Hh: number) => {
+  const draw = (ctx: CanvasRenderingContext2D, W: number, Hh: number, excludeId?: string) => {
     const g = ctx.createRadialGradient(W / 2, Hh * 0.55, 0, W / 2, Hh * 0.55, W * 0.7);
     g.addColorStop(0, '#fff7f2'); g.addColorStop(1, '#f6dfe0');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh);
@@ -195,7 +197,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
     for (let x = 0; x < W; x += 50) ctx.fillRect(x, 0, 25, Hh);
     for (let y = 0; y < Hh; y += 50) ctx.fillRect(0, y, W, 25);
     const L = cakeLayout(cake, W, Hh, zoom, tilt);
-    renderCake(ctx, cake, L);
+    renderCake(ctx, excludeId ? { ...cake, items: cake.items.filter((i) => i.id !== excludeId) } : cake, L);
     if (piping) {
       ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = '#7a1f2b'; ctx.font = '22px Fredoka'; ctx.textAlign = 'center';
       ctx.fillText('Draw on the cake to pipe frosting', W / 2, Hh - 24); ctx.restore();
@@ -307,16 +309,16 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
           </div>
         </>
       );
-      case 'fruits': return (<><span className="label">Tap to add · drag onto the cake</span><div className="grid grid-cols-3 gap-2">{FRUITS.map((k) => <Asset key={k} kind={k} />)}</div></>);
+      case 'fruits': return (<><span className="label">Tap to add · drag onto the cake</span><div className="grid grid-cols-3 gap-2">{FRUITS.map((k) => asset(k))}</div></>);
       case 'sprinkles': return (
         <>
           <span className="label">Tap to scatter a handful</span>
-          <div className="grid grid-cols-3 gap-2">{SPRINKLES.map((s) => <Asset key={s.id} kind="sprinkles" extra={{ variant: s.id, scale: 1 }} label={s.label} />)}</div>
+          <div className="grid grid-cols-3 gap-2">{SPRINKLES.map((s) => asset('sprinkles', { variant: s.id, scale: 1 }, s.label))}</div>
           <button className="btn-cream mt-3 w-full" onClick={() => addItem('sprinkles', { variant: 'rainbow', scale: 3.4 }, { x: 0, y: 0 })}><Sparkles size={16} />Sprinkle the whole top</button>
           <p className="mt-2 text-sm text-wine/70">Each handful is one movable cluster — resize it to cover more of the cake.</p>
         </>
       );
-      case 'decor': return (<>{DECOR.map((g) => (<div key={g.title}><span className="label">{g.title}</span><div className="grid grid-cols-3 gap-2">{g.kinds.map((k) => <Asset key={k} kind={k} />)}</div></div>))}</>);
+      case 'decor': return (<>{DECOR.map((g) => (<div key={g.title}><span className="label">{g.title}</span><div className="grid grid-cols-3 gap-2">{g.kinds.map((k) => asset(k))}</div></div>))}</>);
       case 'text': return (
         <>
           <span className="label">Preset messages</span>
@@ -416,7 +418,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
     <div className="flex h-[100dvh] flex-col">
       {/* top bar */}
       <header className="z-10 flex items-center gap-1.5 border-b-2 border-wine/10 bg-cream/90 px-2 py-2 backdrop-blur sm:gap-2 sm:px-4">
-        <button className="icon-btn" onClick={onBack} title="Back"><ArrowLeft size={18} /></button>
+        <button className="icon-btn" onClick={() => { flush(); onBack(); }} title="Back"><ArrowLeft size={18} /></button>
         <div className="hidden min-w-0 flex-1 sm:block">
           <div className="truncate font-script text-xl text-cherry">{challenge ? challenge.title : 'Free Cake Studio'}</div>
           <div className="text-[11px] font-semibold uppercase tracking-widest text-wine/50">Step 1 of 3 · Decorate</div>
@@ -430,14 +432,14 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
           <button className="icon-btn" onClick={() => setTilt((t) => (t > 0.9 ? 0.55 : 1))} title={tilt > 0.9 ? 'Angled view' : 'Top view'}><Eye size={18} /></button>
           <button className="icon-btn" onClick={() => setSaveOpen(true)} title="Save"><Save size={18} /></button>
         </div>
-        <button className="btn-cherry px-3 sm:px-5" onClick={() => { setSel(null); onNext(); }}><span className="hidden sm:inline">Design Box</span><ArrowRight size={18} /></button>
+        <button className="btn-cherry px-3 sm:px-5" onClick={() => { setSel(null); flush(); onNext(); }}><span className="hidden sm:inline">Design Box</span><ArrowRight size={18} /></button>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* canvas */}
         <main className="relative order-1 h-[46dvh] shrink-0 p-2 lg:order-2 lg:h-auto lg:flex-1 lg:p-4">
           <Stage draw={draw} redrawKey={[cake, tilt, zoom, piping]} items={cake.items} selectedId={sel} onSelect={setSel}
-            onItems={(items, mode) => H.set((c) => ({ ...c, items }), mode)} begin={H.begin} end={H.end} piping={piping} api={api} />
+            onItems={(items, mode) => H.set((c) => ({ ...c, items }), mode)} piping={piping} api={api} photos={cake.photos} />
           <div className="pointer-events-none absolute left-3 top-3 hidden rounded-full bg-cream/90 px-3 py-1 font-hand text-lg text-wine shadow-soft sm:block">
             {cake.shape} · {cake.size} · {cake.layers} layer{cake.layers > 1 ? 's' : ''}
           </div>
@@ -487,7 +489,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
         <label className="label">Creation name</label>
         <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-2xl border-2 border-wine/15 bg-white p-3 font-hand text-2xl outline-none focus:border-rose" />
         <p className="mt-2 text-sm text-wine/60">Saved in this browser on this device.</p>
-        <button className="btn-cherry mt-4 w-full" onClick={async () => { await onSave(name); setSaveOpen(false); }}><Save size={16} />Save cake</button>
+        <button className="btn-cherry mt-4 w-full" onClick={async () => { flush(); await new Promise((r) => setTimeout(r, 30)); await onSave(name); setSaveOpen(false); }}><Save size={16} />Save cake</button>
       </Modal>
       <Modal open={resetOpen} onClose={() => setResetOpen(false)} title="Start over?">
         <p className="text-wine/80">This clears your cake back to a plain pink buttercream cake. You can still undo afterwards.</p>
@@ -515,7 +517,7 @@ export function ChallengeCard({ challenge, checklist }: { challenge: Challenge; 
 }
 
 function TemplateBtn({ name, cake, onPick }: { name: string; cake: CakeState; onPick: () => void }) {
-  const img = useMemo(() => cakeThumb(cake, 220), [cake]);
+  const img = useMemo(() => { if (!tplCache.has(name)) tplCache.set(name, cakeThumb(cake, 220)); return tplCache.get(name)!; }, [cake, name]);
   return (
     <button onClick={onPick} className="thumb aspect-auto flex-col p-1.5">
       <img src={img} alt="" className="h-24 w-24 object-contain" />
@@ -533,6 +535,7 @@ function BorderPick({ value, onChange }: { value: CakeState['borders']['top']; o
 }
 
 const iconCache = new Map<string, string>();
+const tplCache = new Map<string, string>();
 function shapeIcon(s: CakeState['shape']) {
   const k = 'shape' + s; if (iconCache.has(k)) return iconCache.get(k)!;
   const c = defaultCake(); c.shape = s; c.layers = 1; c.stand = 'none'; c.borders = { ...c.borders, top: 'beads', bottom: 'none' };

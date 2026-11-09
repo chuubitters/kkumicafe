@@ -1,6 +1,6 @@
 import { MutableRefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Item, Tip } from '../types';
-import { Layout, itemBox, itemMatrix, proj, unproj } from '../render/cake';
+import { Layout, drawItems, itemBox, itemMatrix, proj, unproj } from '../render/cake';
 import { onImageLoad } from '../lib/images';
 import { mkItem } from '../lib/defaults';
 import { play } from '../lib/sound';
@@ -10,14 +10,13 @@ export const STAGE = 1000;
 export interface StageApi { clientToPlane: (x: number, y: number) => { x: number; y: number } | null; canvas: HTMLCanvasElement | null }
 
 interface Props {
-  draw: (ctx: CanvasRenderingContext2D, W: number, H: number) => Layout;
+  draw: (ctx: CanvasRenderingContext2D, W: number, H: number, excludeId?: string) => Layout;
+  photos?: Record<string, string>;
   redrawKey: unknown[];
   items: Item[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onItems: (items: Item[], mode: 'live' | 'commit') => void;
-  begin: () => void;
-  end: () => void;
   piping?: { tip: Tip; color: string; size: number } | null;
   api?: MutableRefObject<StageApi | null>;
   interactive?: boolean;
@@ -48,7 +47,7 @@ function pipingPts(it: Item, L: Layout) {
   return out;
 }
 
-export default function Stage({ draw, redrawKey, items, selectedId, onSelect, onItems, begin, end, piping, api, interactive = true }: Props) {
+export default function Stage({ draw, redrawKey, items, selectedId, onSelect, onItems, piping, api, interactive = true, photos = {} }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const L = useRef<Layout | null>(null);
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -65,6 +64,38 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
     fit(); const ro = new ResizeObserver(fit); ro.observe(w); return () => ro.disconnect();
   }, []);
 
+  // Gesture fast-path: while dragging/piping, the untouched scene is cached in an
+  // offscreen canvas and only the moving item is redrawn — no React re-render per move.
+  const live = useRef<{ item: Item; isNew: boolean } | null>(null);
+  const baseCache = useRef<HTMLCanvasElement | null>(null);
+  const photosRef = useRef(photos); photosRef.current = photos;
+
+  const drawOverlay = (ctx: CanvasRenderingContext2D, it: Item, lay: Layout) => {
+    ctx.save();
+    ctx.strokeStyle = '#c8203a'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]);
+    if (it.kind === 'piping') {
+      const pts = pipingPts(it, lay);
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      pts.forEach((p) => { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
+      const pad = (it.size || 10) * lay.k * 1.4;
+      ctx.strokeRect(x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2);
+    } else {
+      const h = handles(it, lay)!;
+      ctx.beginPath(); h.corners.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(h.topMid.x, h.topMid.y); ctx.lineTo(h.rot.x, h.rot.y); ctx.stroke();
+      const knob = (x: number, y: number, icon: 'rot' | 'scale') => {
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#c8203a'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.lineWidth = 2.5; ctx.beginPath();
+        if (icon === 'rot') { ctx.arc(x, y, 7, -0.5, Math.PI * 1.3); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x + 7, y - 1); ctx.lineTo(x + 1, y - 3); ctx.stroke(); }
+        else { ctx.moveTo(x - 6, y - 6); ctx.lineTo(x + 6, y + 6); ctx.moveTo(x + 6, y + 6); ctx.lineTo(x + 6, y); ctx.moveTo(x + 6, y + 6); ctx.lineTo(x, y + 6); ctx.stroke(); }
+      };
+      knob(h.rot.x, h.rot.y, 'rot'); knob(h.scale.x, h.scale.y, 'scale');
+    }
+    ctx.restore();
+  };
+
   const render = useCallback(() => {
     cancelAnimationFrame(raf.current);
     raf.current = requestAnimationFrame(() => {
@@ -73,37 +104,42 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, c.width, c.height);
       const sc = c.width / STAGE;
+      const lv = live.current;
+      if (lv && baseCache.current && L.current) {
+        ctx.drawImage(baseCache.current, 0, 0);
+        ctx.setTransform(sc, 0, 0, sc, 0, 0);
+        drawItems(ctx, [lv.item], L.current, photosRef.current, 0);
+        if (!lv.isNew) drawOverlay(ctx, lv.item, L.current);
+        return;
+      }
       ctx.setTransform(sc, 0, 0, sc, 0, 0);
       const lay = drawRef.current(ctx, STAGE, STAGE);
       L.current = lay;
       const it = itemsRef.current.find((i) => i.id === selRef.current);
-      if (it && interactive) {
-        ctx.save();
-        ctx.strokeStyle = '#c8203a'; ctx.lineWidth = 2; ctx.setLineDash([7, 5]);
-        if (it.kind === 'piping') {
-          const pts = pipingPts(it, lay);
-          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-          pts.forEach((p) => { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); });
-          const pad = (it.size || 10) * lay.k * 1.4;
-          ctx.strokeRect(x0 - pad, y0 - pad, x1 - x0 + pad * 2, y1 - y0 + pad * 2);
-        } else {
-          const h = handles(it, lay)!;
-          ctx.beginPath(); h.corners.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.beginPath(); ctx.moveTo(h.topMid.x, h.topMid.y); ctx.lineTo(h.rot.x, h.rot.y); ctx.stroke();
-          const knob = (x: number, y: number, icon: 'rot' | 'scale') => {
-            ctx.fillStyle = '#fff'; ctx.strokeStyle = '#c8203a'; ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.lineWidth = 2.5; ctx.beginPath();
-            if (icon === 'rot') { ctx.arc(x, y, 7, -0.5, Math.PI * 1.3); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x + 7, y - 1); ctx.lineTo(x + 1, y - 3); ctx.stroke(); }
-            else { ctx.moveTo(x - 6, y - 6); ctx.lineTo(x + 6, y + 6); ctx.moveTo(x + 6, y + 6); ctx.lineTo(x + 6, y); ctx.moveTo(x + 6, y + 6); ctx.lineTo(x, y + 6); ctx.stroke(); }
-          };
-          knob(h.rot.x, h.rot.y, 'rot'); knob(h.scale.x, h.scale.y, 'scale');
-        }
-        ctx.restore();
-      }
+      if (it && interactive) drawOverlay(ctx, it, lay);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interactive]);
+
+  const startLive = (item: Item, isNew: boolean) => {
+    const c = ref.current; if (!c) return;
+    let b = baseCache.current;
+    if (!b) b = baseCache.current = document.createElement('canvas');
+    if (b.width !== c.width) { b.width = c.width; b.height = c.height; }
+    const bctx = b.getContext('2d')!;
+    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.clearRect(0, 0, b.width, b.height);
+    const sc = c.width / STAGE; bctx.setTransform(sc, 0, 0, sc, 0, 0);
+    L.current = drawRef.current(bctx, STAGE, STAGE, isNew ? undefined : item.id);
+    live.current = { item, isNew };
+    render();
+  };
+  const commitLive = () => {
+    const lv = live.current; if (!lv) return;
+    live.current = null;
+    if (lv.isNew) onItems([...itemsRef.current, lv.item], 'commit');
+    else onItems(itemsRef.current.map((i) => (i.id === lv.item.id ? lv.item : i)), 'commit');
+    render();
+  };
 
   // keep canvas resolution matched to its displayed size
   useLayoutEffect(() => {
@@ -158,7 +194,7 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
     return null;
   };
 
-  const update = (id: string, fn: (it: Item) => Item) => onItems(itemsRef.current.map((i) => (i.id === id ? fn(i) : i)), 'live');
+  const update = (_id: string, fn: (it: Item) => Item) => { if (!live.current) return; live.current.item = fn(live.current.item); render(); };
 
   const onDown = (e: React.PointerEvent) => {
     if (!interactive || !L.current) return;
@@ -171,9 +207,10 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
       const it = itemsRef.current.find((i) => i.id === selRef.current);
       const [a, b] = [...pointers.current.values()];
       if (it && it.kind !== 'piping') {
-        if (drag.current?.kind === 'pipe') { onItems(itemsRef.current.filter((i) => i.id !== drag.current!.id), 'live'); }
-        drag.current = { kind: 'pinch', id: it.id, d0: Math.hypot(a.x - b.x, a.y - b.y), a0: Math.atan2(b.y - a.y, b.x - a.x), s0: it.scale, r0: it.rot };
-        begin();
+        const cur = live.current && !live.current.isNew && live.current.item.id === it.id ? live.current.item : it;
+        if (live.current?.isNew || (live.current && live.current.item.id !== it.id)) live.current = null; // drop a stroke started by the 1st finger
+        drag.current = { kind: 'pinch', id: it.id, d0: Math.hypot(a.x - b.x, a.y - b.y), a0: Math.atan2(b.y - a.y, b.x - a.x), s0: cur.scale, r0: cur.rot };
+        if (!live.current) startLive(cur, false);
       }
       return;
     }
@@ -182,9 +219,8 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
     if (piping) {
       const q = unproj(lay, p.x, p.y);
       const it = mkItem('piping', 0, 0, { points: [q.x, q.y], tip: piping.tip, color: piping.color, size: piping.size });
-      begin();
-      onItems([...itemsRef.current, it], 'live');
       drag.current = { kind: 'pipe', id: it.id, pts: [q.x, q.y] };
+      startLive(it, true);
       onSelect(null);
       return;
     }
@@ -192,16 +228,17 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
     if (sel && sel.kind !== 'piping') {
       const h = handles(sel, lay)!;
       if (Math.hypot(p.x - h.rot.x, p.y - h.rot.y) < 22) {
-        begin(); drag.current = { kind: 'rotate', id: sel.id, cx: h.center.x, cy: h.center.y, a0: Math.atan2(p.y - h.center.y, p.x - h.center.x), r0: sel.rot }; return;
+        startLive(sel, false); drag.current = { kind: 'rotate', id: sel.id, cx: h.center.x, cy: h.center.y, a0: Math.atan2(p.y - h.center.y, p.x - h.center.x), r0: sel.rot }; return;
       }
       if (Math.hypot(p.x - h.scale.x, p.y - h.scale.y) < 22) {
-        begin(); drag.current = { kind: 'scale', id: sel.id, cx: h.center.x, cy: h.center.y, d0: Math.hypot(p.x - h.center.x, p.y - h.center.y), s0: sel.scale }; return;
+        startLive(sel, false); drag.current = { kind: 'scale', id: sel.id, cx: h.center.x, cy: h.center.y, d0: Math.hypot(p.x - h.center.x, p.y - h.center.y), s0: sel.scale }; return;
       }
     }
     const it = hit(p.x, p.y);
     if (it) {
       onSelect(it.id);
-      begin();
+      selRef.current = it.id;
+      startLive(it, false);
       drag.current = { kind: 'move', id: it.id, sx: p.x, sy: p.y, ox: it.x, oy: it.y, pts: it.points?.slice() };
     } else onSelect(null);
   };
@@ -244,7 +281,7 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
     if (d.kind === 'pinch' && pointers.current.size > 0) return;
     drag.current = null;
     if (d.kind === 'pipe') play('squish');
-    end();
+    commitLive();
   };
 
   return (

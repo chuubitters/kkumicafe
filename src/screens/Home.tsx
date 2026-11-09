@@ -38,8 +38,11 @@ function DisplayWindow({ shelves }: { shelves: { src: string; label: string }[][
   );
 }
 
+let artCache: { cakes: { src: string; label: string }[]; boxes: { src: string; label: string }[] } | null = null;
+
 export default function Home({ onPlay, onCollection, sound, onSound }: { onPlay: () => void; onCollection: () => void; sound: boolean; onSound: () => void }) {
   const art = useMemo(() => {
+    if (artCache) return artCache;
     const t = templates();
     const cakes = t.map((x) => ({ src: cakeThumb(x.cake, 300), label: x.name }));
     const bx = (p: Partial<BoxState>, cake = t[0].cake) => boxThumb({ ...defaultBox(), ...p } as BoxState, cake, 300);
@@ -48,7 +51,8 @@ export default function Home({ onPlay, onCollection, sound, onSound }: { onPlay:
       { src: bx({ shape: 'heart', lid: { ...defaultBox().lid, type: 'polka', bg: '#f6c9d3', c1: '#ffffff' }, side: { ...defaultBox().side, bg: '#f4a7b9' }, ribbon: 'none', ribbonColor: '#ffffff', items: [] }, t[1].cake), label: 'Heart hatbox' },
       { src: bx({ shape: 'round', lid: { ...defaultBox().lid, type: 'floral', bg: '#f7efe2', c1: '#e98aa3', c2: '#8fb08a' }, side: { ...defaultBox().side, bg: '#cdbbe8' }, ribbon: 'single', ribbonColor: '#b49ae0', items: [] }, t[5].cake), label: 'Tea rose hatbox' },
     ];
-    return { cakes, boxes };
+    artCache = { cakes, boxes };
+    return artCache;
   }, []);
 
   return (

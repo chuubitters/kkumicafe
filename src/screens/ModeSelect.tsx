@@ -6,8 +6,11 @@ import { cakeThumb } from '../render/thumbs';
 import { Logo, Stars } from '../components/ui';
 import type { Challenge } from '../lib/challenges';
 
+let modeArt: { free: string; ch: string } | null = null;
+let chImgs: string[] | null = null;
+
 export function ModeSelect({ onBack, onFree, onChallenge }: { onBack: () => void; onFree: () => void; onChallenge: () => void }) {
-  const art = useMemo(() => ({ free: cakeThumb(templates()[1].cake, 420), ch: cakeThumb(CHALLENGES[0].example, 420) }), []);
+  const art = useMemo(() => (modeArt ??= { free: cakeThumb(templates()[1].cake, 420), ch: cakeThumb(CHALLENGES[0].example, 420) }), []);
   const Card = ({ title, desc, feats, img, onClick, icon, accent, badge }: { title: string; desc: string; feats: string[]; img: string; onClick: () => void; icon: React.ReactNode; accent: string; badge: string }) => (
     <button onClick={onClick} className="card group relative flex flex-col overflow-hidden text-left transition hover:-translate-y-1.5 hover:shadow-soft">
       <div className="relative flex h-60 items-center justify-center overflow-hidden" style={{ background: `radial-gradient(circle at 50% 70%, #fff 0, ${accent} 75%)` }}>
@@ -39,7 +42,7 @@ export function ModeSelect({ onBack, onFree, onChallenge }: { onBack: () => void
 }
 
 export function ChallengeSelect({ onBack, onPick }: { onBack: () => void; onPick: (c: Challenge) => void }) {
-  const imgs = useMemo(() => CHALLENGES.map((c) => cakeThumb(c.example, 300)), []);
+  const imgs = useMemo(() => (chImgs ??= CHALLENGES.map((c) => cakeThumb(c.example, 300))), []);
   const diff = { Easy: 1, Medium: 2, Hard: 3 } as const;
   return (
     <div className="screen-enter mx-auto min-h-[100dvh] max-w-6xl px-4 py-4 pb-12">

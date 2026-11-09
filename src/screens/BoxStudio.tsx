@@ -74,7 +74,7 @@ export default function BoxStudio({ cake, box: initial, onChange, onBack, onNext
   const animRef = useRef(0);
   const [text, setText] = useState('');
 
-  useEffect(() => { onChange(box); }, [box, onChange]);
+  useEffect(() => { const t = setTimeout(() => onChange(box), 250); return () => clearTimeout(t); }, [box, onChange]);
 
   const toggleOpen = () => {
     const target = open ? 0 : 1;
@@ -100,7 +100,7 @@ export default function BoxStudio({ cake, box: initial, onChange, onBack, onNext
   };
   const updItem = (id: string, p: Partial<Item>, live = false) => H.set((b) => ({ ...b, items: b.items.map((i) => (i.id === id ? { ...i, ...p } : i)) }), live ? 'live' : 'commit');
 
-  const draw = (ctx: CanvasRenderingContext2D, W: number, Hh: number) => {
+  const draw = (ctx: CanvasRenderingContext2D, W: number, Hh: number, excludeId?: string) => {
     const g = ctx.createLinearGradient(0, 0, 0, Hh);
     g.addColorStop(0, '#fbeef0'); g.addColorStop(0.62, '#f6dfe0'); g.addColorStop(0.62, '#ead2c4'); g.addColorStop(1, '#dcbfae');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, Hh);
@@ -108,7 +108,7 @@ export default function BoxStudio({ cake, box: initial, onChange, onBack, onNext
     for (let y = Hh * 0.62 + 30; y < Hh; y += 34) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     const L = boxLayout(cake, W, Hh, 1, tilt);
     const lid = openAmt > 0.001 ? { dx: openAmt * W * 0.06, dy: -openAmt * Hh * 0.3, scale: 1 - openAmt * 0.08, alpha: 1, behind: openAmt > 0.5 } : null;
-    renderBox(ctx, box, cake, L, { lid });
+    renderBox(ctx, excludeId ? { ...box, items: box.items.filter((i) => i.id !== excludeId) } : box, cake, L, { lid });
     return L;
   };
 
@@ -205,7 +205,7 @@ export default function BoxStudio({ cake, box: initial, onChange, onBack, onNext
   return (
     <div className="flex h-[100dvh] flex-col">
       <header className="z-10 flex items-center gap-2 border-b-2 border-wine/10 bg-cream/90 px-2 py-2 backdrop-blur sm:px-4">
-        <button className="icon-btn" onClick={onBack} title="Back to cake"><ArrowLeft size={18} /></button>
+        <button className="icon-btn" onClick={() => { onChange(box); onBack(); }} title="Back to cake"><ArrowLeft size={18} /></button>
         <div className="hidden min-w-0 flex-1 sm:block">
           <div className="truncate font-script text-xl text-cherry">Cake Box Studio</div>
           <div className="text-[11px] font-semibold uppercase tracking-widest text-wine/50">Step 2 of 3 · Packaging</div>
@@ -215,13 +215,13 @@ export default function BoxStudio({ cake, box: initial, onChange, onBack, onNext
           <button className="icon-btn" disabled={!H.canRedo} onClick={H.redo} title="Redo"><Redo2 size={18} /></button>
           <button className="btn-cream px-3 py-2 text-sm" onClick={toggleOpen}>{open ? <Package size={16} /> : <PackageOpen size={16} />}<span className="hidden sm:inline">{open ? 'Close lid' : 'Open box'}</span></button>
         </div>
-        <button className="btn-cherry px-3 sm:px-5" onClick={onNext}><span className="hidden sm:inline">Finish</span><ArrowRight size={18} /></button>
+        <button className="btn-cherry px-3 sm:px-5" onClick={() => { onChange(box); onNext(); }}><span className="hidden sm:inline">Finish</span><ArrowRight size={18} /></button>
       </header>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <main className="relative order-1 flex h-[46dvh] shrink-0 flex-col p-2 lg:order-2 lg:h-auto lg:flex-1 lg:p-4">
           <div className="min-h-0 flex-1">
             <Stage draw={draw} redrawKey={[box, cake, tilt, openAmt]} items={open ? [] : box.items} selectedId={open ? null : sel} onSelect={setSel}
-              onItems={(items, mode) => H.set((b) => ({ ...b, items }), mode)} begin={H.begin} end={H.end} interactive={!open} />
+              onItems={(items, mode) => H.set((b) => ({ ...b, items }), mode)} interactive={!open} photos={cake.photos} />
           </div>
           <div className="mx-auto flex w-full max-w-md items-center gap-3 px-2 pt-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-wine/60">View</span>

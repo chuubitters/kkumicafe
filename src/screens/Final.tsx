@@ -53,8 +53,15 @@ export default function Final({ project, challenge, onPostcard, onBack, onSave, 
     compose(tmp.getContext('2d')!, c.width, c.height, project, comp, 0.3);
     ctx.drawImage(tmp, 0, 0);
   };
-  useEffect(() => { void ensureReady(project).then(drawStatic); });
-  useEffect(() => onImageLoad(drawStatic));
+  // redraw the preview only when something visible changed (debounced while typing)
+  useEffect(() => {
+    if (playing) return;
+    const t = setTimeout(() => { void ensureReady(project).then(drawStatic); }, 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, comp, playing]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => onImageLoad(drawStatic), [project, comp, playing]);
 
   const playReveal = () => {
     const c = ref.current; if (!c) return;
