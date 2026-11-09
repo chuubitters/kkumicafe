@@ -35,6 +35,7 @@ export interface Item {
   font?: string;
   fontSize?: number;
   variant?: string; // sprinkle kind, frame shape...
+  fill?: boolean; // sprinkles: cover the whole cake top
   photoId?: string;
   crop?: { zoom: number; px: number; py: number };
   border?: boolean;

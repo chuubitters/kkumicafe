@@ -1,5 +1,5 @@
 import { darken, lighten, mix, rgba } from '../lib/color';
-import { outline, pathFrom, rng } from '../lib/geometry';
+import { Pt, bbox, outline, pathFrom, pointInPoly, rng } from '../lib/geometry';
 import type { Item, ItemKind } from '../types';
 import { creamDab } from './cream';
 import { getImage } from '../lib/images';
@@ -217,18 +217,41 @@ function kiwi(ctx: Ctx, s: number, seed: number) {
 const RAINBOW = ['#f48fb1', '#fff176', '#81d4fa', '#a5d6a7', '#ce93d8', '#ffffff', '#ffb74d', '#ef5350'];
 const CHOC = ['#3e2216', '#5a3426', '#2a160e', '#6d4230'];
 
-function sprinkles(ctx: Ctx, s: number, item: Item, k: number, tilt: number) {
+/** Sprinkle positions as offsets (plane units) from the item, kept inside the cake top. */
+function sprinklePoints(item: Item, clip?: Pt[]): [number, number][] {
   const R = rng(item.seed);
-  const radius = s * 0.5;
+  const out: [number, number][] = [];
+  if (item.fill && clip) {
+    // cover the whole top following the cake's shape (heart, star, square…)
+    const b = bbox(clip);
+    const area = b.w * b.h;
+    const n = Math.round(area * 0.0045 * Math.max(0.3, Math.min(2, item.scale / 3.4)));
+    for (let i = 0; i < n * 3 && out.length < n; i++) {
+      const ux = b.x0 + R() * b.w, uy = b.y0 + R() * b.h;
+      if (pointInPoly(ux, uy, clip)) out.push([ux - item.x, uy - item.y]);
+    }
+    return out;
+  }
+  const radius = (ASSETS.sprinkles.base * item.scale) / 2;
   const n = Math.round(70 * item.scale * item.scale + 20);
-  const v = item.variant || 'rainbow';
   const cos = Math.cos(item.rot), sin = Math.sin(item.rot);
   for (let i = 0; i < n; i++) {
     const a = R() * Math.PI * 2, d = Math.sqrt(R()) * radius;
-    let px = Math.cos(a) * d, py = Math.sin(a) * d;
-    // undo the item's rotation and apply perspective manually so each sprinkle stays upright
+    const px = Math.cos(a) * d, py = Math.sin(a) * d;
     const rx = px * cos - py * sin, ry = px * sin + py * cos;
-    px = rx; py = ry * tilt;
+    // drop sprinkles that would fall off the edge of the cake
+    if (clip && !pointInPoly(item.x + rx, item.y + ry, clip)) continue;
+    out.push([rx, ry]);
+  }
+  return out;
+}
+
+function sprinkles(ctx: Ctx, _s: number, item: Item, k: number, tilt: number, clip?: Pt[]) {
+  const R = rng(item.seed * 7 + 3);
+  const v = item.variant || 'rainbow';
+  for (const [ux, uy] of sprinklePoints(item, clip)) {
+    // apply perspective manually so each sprinkle stays upright
+    const px = ux * k, py = uy * k * tilt;
     const ang = R() * Math.PI;
     ctx.save(); ctx.translate(px, py); ctx.rotate(ang);
     if (v === 'rainbow' || v === 'chocolate') {
@@ -734,7 +757,7 @@ export function textWidth(ctx: Ctx, item: Item, s: number) {
 }
 
 /** Draw a decoration centred at (0,0). s = on-screen size in px. */
-export function drawAsset(ctx: Ctx, item: Item, s: number, o: { k: number; tilt: number; t: number; photos: Record<string, string> }) {
+export function drawAsset(ctx: Ctx, item: Item, s: number, o: { k: number; tilt: number; t: number; photos: Record<string, string>; clip?: Pt[] }) {
   const meta = ASSETS[item.kind as Exclude<ItemKind, 'piping'>];
   const col = item.color || meta?.color || '#f4a7b9';
   switch (item.kind) {
@@ -744,7 +767,7 @@ export function drawAsset(ctx: Ctx, item: Item, s: number, o: { k: number; tilt:
     case 'raspberry': return raspberry(ctx, s);
     case 'peach': return peach(ctx, s);
     case 'kiwi': return kiwi(ctx, s, item.seed);
-    case 'sprinkles': return sprinkles(ctx, s, item, o.k, o.tilt);
+    case 'sprinkles': return sprinkles(ctx, s, item, o.k, o.tilt, o.clip);
     case 'rose': return rose(ctx, s, col);
     case 'daisy': return daisy(ctx, s, col);
     case 'blossom': return blossom(ctx, s, col);

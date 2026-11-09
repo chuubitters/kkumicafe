@@ -7,7 +7,7 @@ import type { CakeState, Filling, Flavor, FrameShape, Item, ItemKind, Project, S
 import { useHistory } from '../lib/useHistory';
 import Stage, { StageApi } from '../components/Stage';
 import { Chips, Modal, Slider, Swatches, Toggle, toast } from '../components/ui';
-import { CAKE_R, FILLINGS, FLAVORS, cakeLayout, drawSlice, renderCake } from '../render/cake';
+import { CAKE_R, FILLINGS, FLAVORS, cakeLayout, drawSlice, renderCake, sprinkleClip } from '../render/cake';
 import { ASSETS } from '../render/assets';
 import { assetThumb, cakeThumb, tipThumb } from '../render/thumbs';
 import { FROSTING_PRESETS, PALETTE, defaultCake, mkItem, templates } from '../lib/defaults';
@@ -85,6 +85,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
   const [name, setName] = useState(project.name);
   const [frame, setFrame] = useState<FrameShape>('circle');
   const [customText, setCustomText] = useState('');
+  const [fillVariant, setFillVariant] = useState<SprinkleKind>('rainbow');
   const api = useRef<StageApi | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const replaceRef = useRef<HTMLInputElement>(null);
@@ -113,11 +114,11 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
   const set = (patch: Partial<CakeState> | ((c: CakeState) => CakeState)) => H.set((c) => (typeof patch === 'function' ? patch(c) : { ...c, ...patch }));
   const updItem = (id: string, patch: Partial<Item>, live = false) => H.set((c) => ({ ...c, items: c.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) }), live ? 'live' : 'commit');
 
-  const addItem = (kind: ItemKind, extra: Partial<Item> = {}, at?: { x: number; y: number }) => {
+  const addItem = (kind: ItemKind, extra: Partial<Item> = {}, at?: { x: number; y: number }, atBottom = false) => {
     const r = Math.random() * 60, a = Math.random() * Math.PI * 2;
     const pos = at || { x: Math.cos(a) * r, y: Math.sin(a) * r };
     const it = mkItem(kind, pos.x, pos.y, { color: ASSETS[kind as Exclude<ItemKind, 'piping'>]?.color, ...extra });
-    set((c) => ({ ...c, items: [...c.items, it] }));
+    set((c) => ({ ...c, items: atBottom ? [it, ...c.items] : [...c.items, it] }));
     setSel(it.id);
     play('pop');
     return it;
@@ -314,8 +315,10 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
         <>
           <span className="label">Tap to scatter a handful</span>
           <div className="grid grid-cols-3 gap-2">{SPRINKLES.map((s) => asset('sprinkles', { variant: s.id, scale: 1 }, s.label))}</div>
-          <button className="btn-cream mt-3 w-full" onClick={() => addItem('sprinkles', { variant: 'rainbow', scale: 3.4 }, { x: 0, y: 0 })}><Sparkles size={16} />Sprinkle the whole top</button>
-          <p className="mt-2 text-sm text-wine/70">Each handful is one movable cluster — resize it to cover more of the cake.</p>
+          <span className="label">Cover the whole top</span>
+          <div className="flex flex-wrap gap-1.5">{SPRINKLES.map((s) => <button key={s.id} className={`chip ${fillVariant === s.id ? 'chip-on' : ''}`} onClick={() => setFillVariant(s.id)}>{s.label}</button>)}</div>
+          <button className="btn-cream mt-2 w-full" onClick={() => addItem('sprinkles', { variant: fillVariant, scale: 3.4, fill: true }, { x: 0, y: 0 }, true)}><Sparkles size={16} />Sprinkle the whole top</button>
+          <p className="mt-2 text-sm text-wine/70">Sprinkles follow your cake's shape — a heart cake gets a heart of sprinkles, and handfuls never spill off the edge. The whole-top layer sits under your other decorations.</p>
         </>
       );
       case 'decor': return (<>{DECOR.map((g) => (<div key={g.title}><span className="label">{g.title}</span><div className="grid grid-cols-3 gap-2">{g.kinds.map((k) => asset(k))}</div></div>))}</>);
@@ -439,7 +442,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
         {/* canvas */}
         <main className="relative order-1 h-[46dvh] shrink-0 p-2 lg:order-2 lg:h-auto lg:flex-1 lg:p-4">
           <Stage draw={draw} redrawKey={[cake, tilt, zoom, piping]} items={cake.items} selectedId={sel} onSelect={setSel}
-            onItems={(items, mode) => H.set((c) => ({ ...c, items }), mode)} piping={piping} api={api} photos={cake.photos} />
+            onItems={(items, mode) => H.set((c) => ({ ...c, items }), mode)} piping={piping} api={api} photos={cake.photos} clip={sprinkleClip(cake.shape)} />
           <div className="pointer-events-none absolute left-3 top-3 hidden rounded-full bg-cream/90 px-3 py-1 font-hand text-lg text-wine shadow-soft sm:block">
             {cake.shape} · {cake.size} · {cake.layers} layer{cake.layers > 1 ? 's' : ''}
           </div>

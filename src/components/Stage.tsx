@@ -12,6 +12,7 @@ export interface StageApi { clientToPlane: (x: number, y: number) => { x: number
 interface Props {
   draw: (ctx: CanvasRenderingContext2D, W: number, H: number, excludeId?: string) => Layout;
   photos?: Record<string, string>;
+  clip?: { x: number; y: number }[];
   redrawKey: unknown[];
   items: Item[];
   selectedId: string | null;
@@ -47,7 +48,7 @@ function pipingPts(it: Item, L: Layout) {
   return out;
 }
 
-export default function Stage({ draw, redrawKey, items, selectedId, onSelect, onItems, piping, api, interactive = true, photos = {} }: Props) {
+export default function Stage({ draw, redrawKey, items, selectedId, onSelect, onItems, piping, api, interactive = true, photos = {}, clip }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
   const L = useRef<Layout | null>(null);
   const itemsRef = useRef(items); itemsRef.current = items;
@@ -69,6 +70,7 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
   const live = useRef<{ item: Item; isNew: boolean } | null>(null);
   const baseCache = useRef<HTMLCanvasElement | null>(null);
   const photosRef = useRef(photos); photosRef.current = photos;
+  const clipRef = useRef(clip); clipRef.current = clip;
 
   const drawOverlay = (ctx: CanvasRenderingContext2D, it: Item, lay: Layout) => {
     ctx.save();
@@ -108,7 +110,7 @@ export default function Stage({ draw, redrawKey, items, selectedId, onSelect, on
       if (lv && baseCache.current && L.current) {
         ctx.drawImage(baseCache.current, 0, 0);
         ctx.setTransform(sc, 0, 0, sc, 0, 0);
-        drawItems(ctx, [lv.item], L.current, photosRef.current, 0);
+        drawItems(ctx, [lv.item], L.current, photosRef.current, 0, clipRef.current);
         if (!lv.isNew) drawOverlay(ctx, lv.item, L.current);
         return;
       }

@@ -159,3 +159,12 @@ export function lowerEnvelope(pts: Pt[], cols = 120): Pt[] {
   }
   return out;
 }
+
+export function pointInPoly(x: number, y: number, poly: Pt[]) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}

@@ -224,6 +224,9 @@ function topTexture(ctx: Ctx, cake: CakeState, L: Layout, col: string) {
 
 export interface RenderOpts { t?: number; selectedId?: string | null; hideItems?: boolean }
 
+/** Area of the cake top where sprinkles may land (slightly inset from the edge). */
+export const sprinkleClip = (shape: CakeState['shape']) => outline(shape, CAKE_R * 0.93, 160);
+
 export function itemSize(item: Item, k: number) {
   if (item.kind === 'piping') return (item.size || 10) * k;
   if (item.kind === 'text') return (item.fontSize || 40) * item.scale * k;
@@ -248,7 +251,7 @@ export function itemBox(item: Item, L: Layout) {
   return { w: s * (m?.w || 1), h: s * (m?.h || 1) };
 }
 
-export function drawItems(ctx: Ctx, items: Item[], L: Layout, photos: Record<string, string>, t = 0) {
+export function drawItems(ctx: Ctx, items: Item[], L: Layout, photos: Record<string, string>, t = 0, clip?: Pt[]) {
   for (const it of items) {
     if (it.kind === 'piping') {
       const pts: Pt[] = [];
@@ -260,7 +263,7 @@ export function drawItems(ctx: Ctx, items: Item[], L: Layout, photos: Record<str
     const s = itemSize(it, L.k);
     ctx.save();
     ctx.setTransform(ctx.getTransform().multiply(itemMatrix(it, L)));
-    drawAsset(ctx, it, s, { k: L.k, tilt: L.tilt, t, photos });
+    drawAsset(ctx, it, s, { k: L.k, tilt: L.tilt, t, photos, clip });
     ctx.restore();
   }
 }
@@ -383,7 +386,7 @@ export function renderCake(ctx: Ctx, cake: CakeState, L: Layout, o: RenderOpts =
 
   if (cake.borders.top !== 'none') drawBorder(ctx, topOrdered, cake.borders.top, 12 * L.k, cake.borders.topColor, true);
 
-  if (!o.hideItems) drawItems(ctx, cake.items, L, cake.photos, t);
+  if (!o.hideItems) drawItems(ctx, cake.items, L, cake.photos, t, sprinkleClip(cake.shape));
 }
 
 /** Render cake into its own transparent canvas. */
