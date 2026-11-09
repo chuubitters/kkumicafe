@@ -93,7 +93,7 @@ export default function Final({ project, challenge, onPostcard, onBack, onSave, 
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b-2 border-wine/10 bg-cream/90 px-3 py-2 backdrop-blur sm:px-4">
         <button className="icon-btn" onClick={onBack} title="Back to box"><ArrowLeft size={18} /></button>
         <div className="min-w-0 flex-1">
-          <input value={project.name} onChange={(e) => onRename(e.target.value)} className="w-full truncate bg-transparent font-script text-xl text-cherry outline-none" />
+          <div className="truncate font-script text-xl text-cherry">{project.name.trim() || 'Your finished cake'}</div>
           <div className="text-[11px] font-semibold uppercase tracking-widest text-wine/50">Step 3 of 3 · Finish &amp; share</div>
         </div>
         <button className="icon-btn" onClick={onHome} title="Home"><Home size={18} /></button>
@@ -113,6 +113,12 @@ export default function Final({ project, challenge, onPostcard, onBack, onSave, 
         </section>
 
         <aside className="space-y-4">
+          <div className="card p-4">
+            <label htmlFor="cake-name" className="font-serif text-lg font-bold text-wine">Name your cake</label>
+            <input id="cake-name" value={project.name} maxLength={40} placeholder="e.g. Strawberry Love for Mom" onChange={(e) => onRename(e.target.value)}
+              className="mt-2 w-full rounded-2xl border-2 border-wine/15 bg-white/80 p-2.5 font-script text-xl text-cherry outline-none placeholder:font-ui placeholder:text-base placeholder:text-wine/40 focus:border-rose" />
+            <p className="mt-1 text-xs text-wine/60">Shown on your picture and in My Cake Collection.</p>
+          </div>
           {challenge && result && (
             <div className="card p-4 text-center">
               <div className="font-script text-2xl text-cherry">{challenge.title}</div>

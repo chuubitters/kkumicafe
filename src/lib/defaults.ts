@@ -43,7 +43,7 @@ export function defaultPostcard(): Postcard {
 }
 
 export function newProject(mode: Project['mode'] = 'free', challengeId?: string): Project {
-  return { id: uid(), name: 'My Sweet Cake', mode, challengeId, cake: defaultCake(), box: defaultBox(), postcard: defaultPostcard(), createdAt: Date.now(), updatedAt: Date.now() };
+  return { id: uid(), name: '', mode, challengeId, cake: defaultCake(), box: defaultBox(), postcard: defaultPostcard(), createdAt: Date.now(), updatedAt: Date.now() };
 }
 
 function ring(kind: ItemKind, n: number, r: number, extra: Partial<Item> = {}, a0 = 0): Item[] {

@@ -487,7 +487,7 @@ export default function Editor({ project, onChange, onBack, onNext, onSave, chal
 
       <Modal open={saveOpen} onClose={() => setSaveOpen(false)} title="Save to collection">
         <label className="label">Creation name</label>
-        <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-2xl border-2 border-wine/15 bg-white p-3 font-hand text-2xl outline-none focus:border-rose" />
+        <input value={name} placeholder="Name your cake" onChange={(e) => setName(e.target.value)} className="w-full rounded-2xl border-2 border-wine/15 bg-white p-3 font-hand text-2xl outline-none focus:border-rose" />
         <p className="mt-2 text-sm text-wine/60">Saved in this browser on this device.</p>
         <button className="btn-cherry mt-4 w-full" onClick={async () => { flush(); await new Promise((r) => setTimeout(r, 30)); await onSave(name); setSaveOpen(false); }}><Save size={16} />Save cake</button>
       </Modal>

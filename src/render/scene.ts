@@ -55,18 +55,6 @@ export function drawBackground(ctx: Ctx, W: number, H: number, bgId: Postcard['b
     ctx.fillStyle = '#ffffff';
     for (let x = 0; x < W; x += W / 30) { ctx.beginPath(); ctx.arc(x, tableY, W / 60, 0, Math.PI); ctx.fill(); }
   }
-  // bunting
-  const cols = ['#f4a7b9', '#fbe7a1', '#bcd9f0', '#c8203a', '#cdbbe8', '#bfe3cf'];
-  ctx.strokeStyle = '#7a1f2b'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(-10, H * 0.03); ctx.quadraticCurveTo(W / 2, H * 0.11, W + 10, H * 0.03); ctx.stroke();
-  const n = 13;
-  for (let i = 0; i < n; i++) {
-    const t = (i + 0.5) / n, x = t * W;
-    const y = (1 - t) * (1 - t) * H * 0.03 + 2 * (1 - t) * t * H * 0.11 + t * t * H * 0.03;
-    const s = W * 0.028;
-    ctx.fillStyle = 'rgba(60,20,15,0.12)'; ctx.beginPath(); ctx.moveTo(x - s + 3, y + 3); ctx.lineTo(x + s + 3, y + 3); ctx.lineTo(x + 3, y + s * 2.2 + 3); ctx.fill();
-    ctx.fillStyle = cols[i % cols.length]; ctx.beginPath(); ctx.moveTo(x - s, y); ctx.lineTo(x + s, y); ctx.lineTo(x, y + s * 2.2); ctx.fill();
-  }
 }
 
 export function sparkle(ctx: Ctx, x: number, y: number, r: number, a = 1, col = '#ffffff') {
@@ -175,13 +163,18 @@ export function compose(ctx: Ctx, W: number, H: number, p: Project, kind: Compos
     sparkles(ctx, CL.cx, CL.cy, 360 * sf, t, 7, 10);
     drawPostcard(ctx, W * 0.5, H * 0.83, W * 0.62, 0.03, p.postcard);
   }
-  // header
-  ctx.save();
-  ctx.fillStyle = 'rgba(255,250,240,0.85)';
-  ctx.beginPath(); ctx.roundRect(W * 0.28, H * 0.135, W * 0.44, H * 0.075, H * 0.04); ctx.fill();
-  ctx.fillStyle = '#c8203a'; ctx.font = `${42 * sf}px Pacifico, cursive`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(p.name || 'Kkumi Cafe', W / 2, H * 0.17, W * 0.42);
-  ctx.restore();
+  // cake name plate (only when the player has named the cake)
+  const title = (p.name || '').trim();
+  if (title) {
+    ctx.save();
+    ctx.font = `${46 * sf}px Pacifico, cursive`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = Math.min(W * 0.8, ctx.measureText(title).width + 90 * sf);
+    ctx.fillStyle = 'rgba(255,250,240,0.88)';
+    ctx.beginPath(); ctx.roundRect(W / 2 - tw / 2, H * 0.06, tw, H * 0.08, H * 0.04); ctx.fill();
+    ctx.fillStyle = '#c8203a';
+    ctx.fillText(title, W / 2, H * 0.1, W * 0.76);
+    ctx.restore();
+  }
 }
 
 const ease = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);

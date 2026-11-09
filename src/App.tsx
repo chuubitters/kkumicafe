@@ -49,7 +49,7 @@ export default function App() {
     const project = projectRef.current;
     if (!project) return;
     try {
-      const saved = await saveProject({ ...project, name: name || 'My Sweet Cake', thumbnail: cakeThumb(project.cake, 420), stars: stars ?? project.stars });
+      const saved = await saveProject({ ...project, name: name.trim() || 'Untitled cake', thumbnail: cakeThumb(project.cake, 420), stars: stars ?? project.stars });
       setProject(saved);
       play('chime'); toast('Saved to My Cake Collection ✿');
     } catch (e) { toast('Could not save: ' + (e as Error).message); }

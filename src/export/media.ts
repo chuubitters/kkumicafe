@@ -17,7 +17,7 @@ export function downloadBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
-export const slug = (s: string) => (s || 'sweet-cake').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sweet-cake';
+export const slug = (s: string) => (s || '').trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'kkumi-cake';
 
 export async function renderComposition(p: Project, kind: Composition, W = 1080, H = 1350, t = 0) {
   await ensureReady(p);
